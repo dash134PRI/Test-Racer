@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Car Racing Game</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+            display: block;
+            margin: 0 auto;
+        }
+        .controls {
+            text-align: center;
+            margin: 20px;
+        }
+        .score {
+            text-align: center;
+            font-size: 24px;
+            margin: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="score">
+        Score: <span id="score">0</span>
+    </div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div class="controls">
+        <p>Use arrow keys to control the car</p>
+        <button onclick="resetGame()">Reset Game</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let score = 0;
+        let gameState = null;
+
+        // Game colors
+        const colors = {
+            track: '#646464',
+            grass: '#006400',
+            playerCar: '#FF0000',
+            aiCar: '#0000FF'
+        };
+
+        // Initialize game
+        async function initGame() {
+            const response = await fetch('/reset', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            gameState = await response.json();
+            render();
+        }
+
+        // Reset game
+        async function resetGame() {
+            score = 0;
+            document.getElementById('score').textContent = score;
+            await initGame();
+        }
+
+        // Handle keyboard input
+        document.addEventListener('keydown', async (e) => {
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                const response = await fetch('/step', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ action: e.key })
+                });
+                gameState = await response.json();
+                score += gameState.reward;
+                document.getElementById('score').textContent = Math.round(score);
+                render();
+
+                if (gameState.done) {
+                    alert('Game Over! Your score: ' + Math.round(score));
+                    resetGame();
+                }
+            }
+        });
+
+        // Render game state
+        function render() {
+            if (!gameState) return;
+
+            const state = gameState.state;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw track
+            ctx.fillStyle = colors.grass;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = colors.track;
+            ctx.beginPath();
+            ctx.arc(canvas.width/2, canvas.height/2, 300, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = colors.grass;
+            ctx.beginPath();
+            ctx.arc(canvas.width/2, canvas.height/2, 100, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw cars
+            drawCar(state[0] * canvas.width, state[1] * canvas.height, state[3] * 360, colors.playerCar);
+            drawCar(state[4] * canvas.width, state[5] * canvas.height, state[7] * 360, colors.aiCar);
+        }
+
+        // Draw car
+        function drawCar(x, y, angle, color) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle * Math.PI / 180);
+            ctx.fillStyle = color;
+            ctx.fillRect(-20, -10, 40, 20);
+            ctx.restore();
+        }
+
+        // Start game
+        initGame();
+    </script>
+</body>
+</html> 
