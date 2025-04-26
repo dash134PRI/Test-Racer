@@ -39,6 +39,8 @@
             padding: 10px;
             background-color: rgba(255, 0, 0, 0.1);
             border-radius: 5px;
+            white-space: pre-wrap;
+            text-align: left;
         }
         .loading {
             position: absolute;
@@ -47,13 +49,25 @@
             transform: translate(-50%, -50%);
             color: white;
             font-size: 24px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 5px;
+        }
+        #error-details {
+            display: none;
+            margin-top: 10px;
+            font-size: 14px;
+            color: #ff9999;
         }
     </style>
 </head>
 <body>
     <div id="game-container">
         <canvas id="game-canvas" width="800" height="600"></canvas>
-        <div id="loading" class="loading">Loading game...</div>
+        <div id="loading" class="loading">
+            Loading game...
+            <div id="error-details"></div>
+        </div>
         <div class="controls">
             <p>Controls: Arrow Keys to move, R to reset</p>
         </div>
@@ -62,35 +76,50 @@
         const canvas = document.getElementById('game-canvas');
         const ctx = canvas.getContext('2d');
         const loading = document.getElementById('loading');
+        const errorDetails = document.getElementById('error-details');
         let gameStream = null;
         let retryCount = 0;
         const maxRetries = 3;
+        let lastError = null;
+
+        function showError(message, details = '') {
+            loading.textContent = message;
+            errorDetails.textContent = details;
+            errorDetails.style.display = details ? 'block' : 'none';
+            loading.style.display = 'block';
+        }
 
         function connectToGame() {
             if (gameStream) {
                 gameStream.close();
             }
 
+            showError('Connecting to game...');
             gameStream = new EventSource('/game');
             
             gameStream.onopen = function() {
                 console.log('Game stream connected');
                 loading.style.display = 'none';
+                retryCount = 0;
             };
 
             gameStream.onmessage = function(event) {
                 try {
-                    const frame = JSON.parse(event.data);
-                    if (frame.image) {
+                    const data = JSON.parse(event.data);
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    if (data.image) {
                         const img = new Image();
                         img.onload = function() {
                             ctx.clearRect(0, 0, canvas.width, canvas.height);
                             ctx.drawImage(img, 0, 0);
                         };
-                        img.src = 'data:image/png;base64,' + frame.image;
+                        img.src = 'data:image/png;base64,' + data.image;
                     }
                 } catch (e) {
                     console.error('Error processing frame:', e);
+                    showError('Error processing game data', e.message);
                 }
             };
 
@@ -100,11 +129,13 @@
                 
                 if (retryCount < maxRetries) {
                     retryCount++;
-                    console.log(`Retrying connection (${retryCount}/${maxRetries})...`);
+                    const retryMessage = `Connection failed. Retrying (${retryCount}/${maxRetries})...`;
+                    showError(retryMessage);
+                    console.log(retryMessage);
                     setTimeout(connectToGame, 2000);
                 } else {
-                    loading.textContent = 'Failed to connect to game. Please refresh the page.';
-                    loading.style.display = 'block';
+                    showError('Failed to connect to game. Please refresh the page.', 
+                        'If the problem persists, check the server logs for more details.');
                 }
             };
         }
@@ -116,7 +147,15 @@
         document.addEventListener('keydown', function(e) {
             if (e.key === 'r' || e.key === 'R') {
                 fetch('/reset', { method: 'POST' })
-                    .catch(error => console.error('Reset failed:', error));
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Reset failed');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Reset failed:', error);
+                        showError('Failed to reset game', error.message);
+                    });
             }
         });
 
