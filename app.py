@@ -9,10 +9,11 @@ import logging
 import json
 import traceback
 import time
+import socket
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,  # Changed to DEBUG for more detailed logs
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -29,14 +30,22 @@ app = Flask(__name__)
 pygame_available = False
 game_instance = None
 last_error = None
+initialization_attempted = False
 
 def initialize_game():
-    global pygame_available, game_instance, last_error
+    global pygame_available, game_instance, last_error, initialization_attempted
+    if initialization_attempted:
+        logger.info("Game initialization already attempted")
+        return pygame_available
+    
+    initialization_attempted = True
     try:
+        logger.info("Attempting to import pygame...")
         import pygame
         logger.info("Pygame imported successfully")
         
         # Initialize pygame with error handling
+        logger.info("Initializing pygame...")
         pygame.mixer.quit()  # Disable sound
         pygame.init()
         if pygame.get_error():
@@ -44,10 +53,12 @@ def initialize_game():
         logger.info("Pygame initialized successfully")
         
         # Import game module
+        logger.info("Attempting to import game module...")
         import game
         logger.info("Game module imported successfully")
         
         # Create game instance
+        logger.info("Creating game instance...")
         game_instance = game.CarRacingGame()
         pygame_available = True
         last_error = None
@@ -132,10 +143,18 @@ def reset_game():
 
 @app.route('/status')
 def status():
+    hostname = socket.gethostname()
+    ip_address = socket.gethostbyname(hostname)
     return {
         "pygame_available": pygame_available,
         "last_error": last_error,
-        "game_instance": "initialized" if game_instance else "not initialized"
+        "game_instance": "initialized" if game_instance else "not initialized",
+        "initialization_attempted": initialization_attempted,
+        "server_info": {
+            "hostname": hostname,
+            "ip_address": ip_address,
+            "port": int(os.environ.get('PORT', 5000))
+        }
     }
 
 @app.route('/health')
