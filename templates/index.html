@@ -3,125 +3,94 @@
 <head>
     <title>Car Racing Game</title>
     <style>
-        canvas {
-            border: 1px solid black;
-            display: block;
-            margin: 0 auto;
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        #game-container {
+            margin: 20px;
+            position: relative;
+        }
+        #game-screen {
+            border: 2px solid #333;
+            background-color: #000;
         }
         .controls {
+            margin-top: 20px;
             text-align: center;
-            margin: 20px;
         }
-        .score {
-            text-align: center;
-            font-size: 24px;
-            margin: 20px;
+        .controls button {
+            margin: 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .instructions {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            max-width: 600px;
         }
     </style>
 </head>
 <body>
-    <div class="score">
-        Score: <span id="score">0</span>
+    <h1>Car Racing Game</h1>
+    <div id="game-container">
+        <img id="game-screen" src="{{ url_for('video_feed') }}" width="800" height="600">
     </div>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
     <div class="controls">
-        <p>Use arrow keys to control the car</p>
-        <button onclick="resetGame()">Reset Game</button>
+        <button onclick="control('up')">↑</button><br>
+        <button onclick="control('left')">←</button>
+        <button onclick="control('right')">→</button><br>
+        <button onclick="control('down')">↓</button><br>
+        <button onclick="control('reset')">Reset</button>
+    </div>
+    <div class="instructions">
+        <h2>How to Play</h2>
+        <p>Use the arrow buttons to control your car:</p>
+        <ul>
+            <li>↑ - Accelerate</li>
+            <li>↓ - Brake/Reverse</li>
+            <li>← - Turn Left</li>
+            <li>→ - Turn Right</li>
+        </ul>
+        <p>Press Reset to start over.</p>
     </div>
 
     <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        let score = 0;
-        let gameState = null;
-
-        // Game colors
-        const colors = {
-            track: '#646464',
-            grass: '#006400',
-            playerCar: '#FF0000',
-            aiCar: '#0000FF'
-        };
-
-        // Initialize game
-        async function initGame() {
-            const response = await fetch('/reset', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-            gameState = await response.json();
-            render();
+        function control(action) {
+            fetch(`/control/${action}`)
+                .then(response => response.text())
+                .then(data => console.log(data));
         }
 
-        // Reset game
-        async function resetGame() {
-            score = 0;
-            document.getElementById('score').textContent = score;
-            await initGame();
-        }
-
-        // Handle keyboard input
-        document.addEventListener('keydown', async (e) => {
-            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-                const response = await fetch('/step', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ action: e.key })
-                });
-                gameState = await response.json();
-                score += gameState.reward;
-                document.getElementById('score').textContent = Math.round(score);
-                render();
-
-                if (gameState.done) {
-                    alert('Game Over! Your score: ' + Math.round(score));
-                    resetGame();
-                }
+        // Keyboard controls
+        document.addEventListener('keydown', (event) => {
+            switch(event.key) {
+                case 'ArrowUp':
+                    control('up');
+                    break;
+                case 'ArrowDown':
+                    control('down');
+                    break;
+                case 'ArrowLeft':
+                    control('left');
+                    break;
+                case 'ArrowRight':
+                    control('right');
+                    break;
+                case 'r':
+                    control('reset');
+                    break;
             }
         });
-
-        // Render game state
-        function render() {
-            if (!gameState) return;
-
-            const state = gameState.state;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // Draw track
-            ctx.fillStyle = colors.grass;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            ctx.fillStyle = colors.track;
-            ctx.beginPath();
-            ctx.arc(canvas.width/2, canvas.height/2, 300, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.fillStyle = colors.grass;
-            ctx.beginPath();
-            ctx.arc(canvas.width/2, canvas.height/2, 100, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Draw cars
-            drawCar(state[0] * canvas.width, state[1] * canvas.height, state[3] * 360, colors.playerCar);
-            drawCar(state[4] * canvas.width, state[5] * canvas.height, state[7] * 360, colors.aiCar);
-        }
-
-        // Draw car
-        function drawCar(x, y, angle, color) {
-            ctx.save();
-            ctx.translate(x, y);
-            ctx.rotate(angle * Math.PI / 180);
-            ctx.fillStyle = color;
-            ctx.fillRect(-20, -10, 40, 20);
-            ctx.restore();
-        }
-
-        // Start game
-        initGame();
     </script>
 </body>
 </html> 
