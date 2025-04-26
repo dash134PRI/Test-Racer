@@ -8,6 +8,7 @@ import sys
 import logging
 import json
 import traceback
+import time
 
 # Configure logging
 logging.basicConfig(
@@ -24,28 +25,52 @@ if os.environ.get('DISPLAY') is None:
 
 app = Flask(__name__)
 
-try:
-    import pygame
-    logger.info("Pygame imported successfully")
-    pygame.mixer.quit()  # Disable sound
-    pygame.init()
-    logger.info("Pygame initialized successfully")
-    import game
-    logger.info("Game module imported successfully")
-    game_instance = game.CarRacingGame()
-    pygame_available = True
-    logger.info("Game instance created successfully")
-except Exception as e:
-    logger.error(f"Error initializing game: {e}")
-    logger.error(traceback.format_exc())
-    pygame_available = False
+# Global variables
+pygame_available = False
+game_instance = None
+last_error = None
+
+def initialize_game():
+    global pygame_available, game_instance, last_error
+    try:
+        import pygame
+        logger.info("Pygame imported successfully")
+        
+        # Initialize pygame with error handling
+        pygame.mixer.quit()  # Disable sound
+        pygame.init()
+        if pygame.get_error():
+            raise Exception(f"Pygame initialization error: {pygame.get_error()}")
+        logger.info("Pygame initialized successfully")
+        
+        # Import game module
+        import game
+        logger.info("Game module imported successfully")
+        
+        # Create game instance
+        game_instance = game.CarRacingGame()
+        pygame_available = True
+        last_error = None
+        logger.info("Game instance created successfully")
+        return True
+    except Exception as e:
+        last_error = str(e)
+        logger.error(f"Error initializing game: {e}")
+        logger.error(traceback.format_exc())
+        pygame_available = False
+        return False
+
+# Initialize game on startup
+initialize_game()
 
 def generate_game_frames():
+    global last_error
     try:
         while True:
             if not pygame_available:
-                logger.error("Pygame not available in frame generator")
-                yield "data: " + json.dumps({"error": "Pygame not available"}) + "\n\n"
+                error_msg = last_error or "Pygame not available"
+                logger.error(f"Pygame not available in frame generator: {error_msg}")
+                yield "data: " + json.dumps({"error": error_msg}) + "\n\n"
                 break
 
             try:
@@ -84,16 +109,18 @@ def index():
 def game_route():
     logger.info("Game route accessed")
     if not pygame_available:
-        logger.error("Pygame not available in game route")
-        return Response("Pygame initialization failed", status=500)
+        error_msg = last_error or "Pygame initialization failed"
+        logger.error(f"Pygame not available in game route: {error_msg}")
+        return Response(error_msg, status=500)
     return Response(generate_game_frames(), mimetype='text/event-stream')
 
 @app.route('/reset', methods=['POST'])
 def reset_game():
     logger.info("Reset game requested")
     if not pygame_available:
-        logger.error("Pygame not available in reset route")
-        return Response("Pygame not available", status=500)
+        error_msg = last_error or "Pygame not available"
+        logger.error(f"Pygame not available in reset route: {error_msg}")
+        return Response(error_msg, status=500)
     try:
         game_instance.reset()
         logger.info("Game reset successfully")
@@ -103,9 +130,16 @@ def reset_game():
         logger.error(traceback.format_exc())
         return Response(str(e), status=500)
 
+@app.route('/status')
+def status():
+    return {
+        "pygame_available": pygame_available,
+        "last_error": last_error,
+        "game_instance": "initialized" if game_instance else "not initialized"
+    }
+
 @app.route('/health')
 def health_check():
-    logger.info("Health check accessed")
     return Response("OK", status=200)
 
 if __name__ == '__main__':

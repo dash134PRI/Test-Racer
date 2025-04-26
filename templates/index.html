@@ -52,12 +52,26 @@
             background-color: rgba(0, 0, 0, 0.7);
             padding: 20px;
             border-radius: 5px;
+            text-align: center;
         }
         #error-details {
             display: none;
             margin-top: 10px;
             font-size: 14px;
             color: #ff9999;
+            text-align: left;
+        }
+        #retry-button {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #retry-button:hover {
+            background-color: #45a049;
         }
     </style>
 </head>
@@ -67,6 +81,7 @@
         <div id="loading" class="loading">
             Loading game...
             <div id="error-details"></div>
+            <button id="retry-button" style="display: none;">Retry Connection</button>
         </div>
         <div class="controls">
             <p>Controls: Arrow Keys to move, R to reset</p>
@@ -77,16 +92,32 @@
         const ctx = canvas.getContext('2d');
         const loading = document.getElementById('loading');
         const errorDetails = document.getElementById('error-details');
+        const retryButton = document.getElementById('retry-button');
         let gameStream = null;
         let retryCount = 0;
         const maxRetries = 3;
         let lastError = null;
 
-        function showError(message, details = '') {
+        function showError(message, details = '', showRetry = false) {
             loading.textContent = message;
             errorDetails.textContent = details;
             errorDetails.style.display = details ? 'block' : 'none';
+            retryButton.style.display = showRetry ? 'block' : 'none';
             loading.style.display = 'block';
+        }
+
+        function checkServerStatus() {
+            return fetch('/status')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Server status check failed');
+                    }
+                    return response.json();
+                })
+                .catch(error => {
+                    console.error('Server status check failed:', error);
+                    throw error;
+                });
         }
 
         function connectToGame() {
@@ -95,53 +126,76 @@
             }
 
             showError('Connecting to game...');
-            gameStream = new EventSource('/game');
             
-            gameStream.onopen = function() {
-                console.log('Game stream connected');
-                loading.style.display = 'none';
-                retryCount = 0;
-            };
-
-            gameStream.onmessage = function(event) {
-                try {
-                    const data = JSON.parse(event.data);
-                    if (data.error) {
-                        throw new Error(data.error);
+            // First check server status
+            checkServerStatus()
+                .then(status => {
+                    console.log('Server status:', status);
+                    if (!status.pygame_available) {
+                        throw new Error(status.last_error || 'Game not available');
                     }
-                    if (data.image) {
-                        const img = new Image();
-                        img.onload = function() {
-                            ctx.clearRect(0, 0, canvas.width, canvas.height);
-                            ctx.drawImage(img, 0, 0);
-                        };
-                        img.src = 'data:image/png;base64,' + data.image;
-                    }
-                } catch (e) {
-                    console.error('Error processing frame:', e);
-                    showError('Error processing game data', e.message);
-                }
-            };
+                    
+                    gameStream = new EventSource('/game');
+                    
+                    gameStream.onopen = function() {
+                        console.log('Game stream connected');
+                        loading.style.display = 'none';
+                        retryCount = 0;
+                    };
 
-            gameStream.onerror = function(error) {
-                console.error('Game stream error:', error);
-                gameStream.close();
-                
-                if (retryCount < maxRetries) {
-                    retryCount++;
-                    const retryMessage = `Connection failed. Retrying (${retryCount}/${maxRetries})...`;
-                    showError(retryMessage);
-                    console.log(retryMessage);
-                    setTimeout(connectToGame, 2000);
-                } else {
-                    showError('Failed to connect to game. Please refresh the page.', 
-                        'If the problem persists, check the server logs for more details.');
-                }
-            };
+                    gameStream.onmessage = function(event) {
+                        try {
+                            const data = JSON.parse(event.data);
+                            if (data.error) {
+                                throw new Error(data.error);
+                            }
+                            if (data.image) {
+                                const img = new Image();
+                                img.onload = function() {
+                                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                                    ctx.drawImage(img, 0, 0);
+                                };
+                                img.src = 'data:image/png;base64,' + data.image;
+                            }
+                        } catch (e) {
+                            console.error('Error processing frame:', e);
+                            showError('Error processing game data', e.message);
+                        }
+                    };
+
+                    gameStream.onerror = function(error) {
+                        console.error('Game stream error:', error);
+                        gameStream.close();
+                        
+                        if (retryCount < maxRetries) {
+                            retryCount++;
+                            const retryMessage = `Connection failed. Retrying (${retryCount}/${maxRetries})...`;
+                            showError(retryMessage);
+                            console.log(retryMessage);
+                            setTimeout(connectToGame, 2000);
+                        } else {
+                            showError('Failed to connect to game', 
+                                'If the problem persists, check the server logs for more details.',
+                                true);
+                        }
+                    };
+                })
+                .catch(error => {
+                    console.error('Connection failed:', error);
+                    showError('Failed to connect to game', 
+                        error.message || 'Check if the server is running',
+                        true);
+                });
         }
 
         // Start the game connection
         connectToGame();
+
+        // Handle retry button click
+        retryButton.addEventListener('click', function() {
+            retryCount = 0;
+            connectToGame();
+        });
 
         // Handle keyboard input
         document.addEventListener('keydown', function(e) {
