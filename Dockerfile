@@ -1,5 +1,8 @@
 FROM python:3.8-slim
 
+# Create a non-root user
+RUN useradd -m appuser
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     python3-dev \
@@ -19,6 +22,10 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
+# Create and activate virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
 # Copy requirements first for better caching
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -30,6 +37,12 @@ COPY . .
 ENV DISPLAY=:99
 ENV SDL_VIDEODRIVER=dummy
 ENV PYTHONUNBUFFERED=1
+
+# Change ownership to non-root user
+RUN chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
 
 # Expose port
 EXPOSE 5000
