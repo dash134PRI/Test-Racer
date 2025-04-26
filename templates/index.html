@@ -11,12 +11,15 @@
             align-items: center;
             height: 100vh;
             background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
         }
         #game-container {
             position: relative;
+            text-align: center;
         }
         #game-canvas {
             border: 2px solid #333;
+            background-color: #000;
         }
         .controls {
             position: absolute;
@@ -27,12 +30,30 @@
             color: white;
             padding: 10px;
             border-radius: 5px;
+            width: 80%;
+            max-width: 400px;
+        }
+        .error-message {
+            color: red;
+            margin: 20px;
+            padding: 10px;
+            background-color: rgba(255, 0, 0, 0.1);
+            border-radius: 5px;
+        }
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
         }
     </style>
 </head>
 <body>
     <div id="game-container">
         <canvas id="game-canvas" width="800" height="600"></canvas>
+        <div id="loading" class="loading">Loading game...</div>
         <div class="controls">
             <p>Controls: Arrow Keys to move, R to reset</p>
         </div>
@@ -40,21 +61,73 @@
     <script>
         const canvas = document.getElementById('game-canvas');
         const ctx = canvas.getContext('2d');
-        const gameStream = new EventSource('/game');
+        const loading = document.getElementById('loading');
+        let gameStream = null;
+        let retryCount = 0;
+        const maxRetries = 3;
 
-        gameStream.onmessage = function(event) {
-            const frame = JSON.parse(event.data);
-            const img = new Image();
-            img.onload = function() {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(img, 0, 0);
+        function connectToGame() {
+            if (gameStream) {
+                gameStream.close();
+            }
+
+            gameStream = new EventSource('/game');
+            
+            gameStream.onopen = function() {
+                console.log('Game stream connected');
+                loading.style.display = 'none';
             };
-            img.src = 'data:image/png;base64,' + frame.image;
-        };
 
+            gameStream.onmessage = function(event) {
+                try {
+                    const frame = JSON.parse(event.data);
+                    if (frame.image) {
+                        const img = new Image();
+                        img.onload = function() {
+                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+                            ctx.drawImage(img, 0, 0);
+                        };
+                        img.src = 'data:image/png;base64,' + frame.image;
+                    }
+                } catch (e) {
+                    console.error('Error processing frame:', e);
+                }
+            };
+
+            gameStream.onerror = function(error) {
+                console.error('Game stream error:', error);
+                gameStream.close();
+                
+                if (retryCount < maxRetries) {
+                    retryCount++;
+                    console.log(`Retrying connection (${retryCount}/${maxRetries})...`);
+                    setTimeout(connectToGame, 2000);
+                } else {
+                    loading.textContent = 'Failed to connect to game. Please refresh the page.';
+                    loading.style.display = 'block';
+                }
+            };
+        }
+
+        // Start the game connection
+        connectToGame();
+
+        // Handle keyboard input
         document.addEventListener('keydown', function(e) {
             if (e.key === 'r' || e.key === 'R') {
-                fetch('/reset', { method: 'POST' });
+                fetch('/reset', { method: 'POST' })
+                    .catch(error => console.error('Reset failed:', error));
+            }
+        });
+
+        // Handle page visibility change
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible') {
+                connectToGame();
+            } else {
+                if (gameStream) {
+                    gameStream.close();
+                }
             }
         });
     </script>

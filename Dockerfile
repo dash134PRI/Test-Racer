@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y \
     libavformat-dev \
     libavcodec-dev \
     zlib1g-dev \
+    alsa-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -44,6 +45,7 @@ COPY . .
 # Set environment variables
 ENV DISPLAY=:99
 ENV SDL_VIDEODRIVER=dummy
+ENV SDL_AUDIODRIVER=dummy
 ENV PYTHONUNBUFFERED=1
 
 # Change ownership to non-root user
