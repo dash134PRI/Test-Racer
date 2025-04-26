@@ -20,10 +20,11 @@ app = Flask(__name__)
 try:
     import pygame
     pygame.init()
+    logger.info("Pygame initialized successfully")
     import game
     game_instance = game.CarRacingGame()
     pygame_available = True
-    logger.info("Pygame initialized successfully")
+    logger.info("Game instance created successfully")
 except Exception as e:
     logger.error(f"Error initializing Pygame: {e}")
     pygame_available = False

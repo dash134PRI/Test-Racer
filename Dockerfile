@@ -29,6 +29,11 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Upgrade pip and install wheel
 RUN pip install --no-cache-dir --upgrade pip wheel setuptools
 
+# Install core dependencies first
+RUN pip install --no-cache-dir numpy==1.19.5
+RUN pip install --no-cache-dir pillow==8.2.0
+RUN pip install --no-cache-dir pygame==2.0.1
+
 # Copy requirements first for better caching
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

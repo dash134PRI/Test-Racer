@@ -1,8 +1,9 @@
 flask==2.0.1
 werkzeug==2.0.3
-# Pygame will be installed separately for Windows
-numpy==1.19.5
-pillow==8.2.0
+# Core dependencies installed in Dockerfile
+# pygame==2.0.1
+# pillow==8.2.0
+# numpy==1.19.5
 gunicorn==20.0.4
 setuptools==57.5.0
 wheel==0.37.1 
